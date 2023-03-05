@@ -2,6 +2,10 @@
   "name": "runst",
   "displayName": "runst",
   "description": "Runs the current rust test",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcoury/runst"
+  },
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.76.0"
