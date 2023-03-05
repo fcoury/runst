@@ -10,8 +10,6 @@ const path = require("path");
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  console.log('Congratulations, your extension "runst" is now active!');
-
   let runCurrentTestDisposable = vscode.commands.registerCommand(
     "runst.runCurrentTest",
     function () {
@@ -51,27 +49,31 @@ function activate(context) {
       const functionName = match[2];
       console.log("Found test function:", functionName);
 
-      context.workspaceState.update("lastTestInfo", { fileUnit, functionName });
-      const terminal = vscode.window.createTerminal("Runst");
-      terminal.show();
-      terminal.sendText(
-        `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`
-      );
+      // check if the file is in a mod tests
+      const src = document.getText();
+      const isModTest = checkModTest(src, position.line);
+
+      const data = {};
+      if (isModTest) {
+        const qualifiedName = getModulePath(fileName);
+        data.command = `cargo test --lib -- ${qualifiedName}::tests::${functionName} --exact --nocapture`;
+        data.title = `Runst: ${functionName}`;
+      } else {
+        data.command = `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`;
+        data.title = `Runst: ${fileUnit}:${functionName}`;
+      }
+
+      context.workspaceState.update("lastTestInfo", data);
+      runCommandInTerminal(data);
     }
   );
 
   let runLastTestDisposable = vscode.commands.registerCommand(
     "runst.runLastTest",
     function () {
-      const lastTestInfo = context.workspaceState.get("lastTestInfo");
-      console.log("lastTestInfo", lastTestInfo);
-      if (lastTestInfo) {
-        const { fileUnit, functionName } = lastTestInfo;
-        const terminal = vscode.window.createTerminal("My Terminal");
-        terminal.show();
-        terminal.sendText(
-          `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`
-        );
+      const data = context.workspaceState.get("lastTestInfo");
+      if (data) {
+        runCommandInTerminal(data);
       }
     }
   );
@@ -81,6 +83,39 @@ function activate(context) {
 
 // This method is called when your extension is deactivated
 function deactivate() {}
+
+function runCommandInTerminal(data) {
+  const { command, title } = data;
+  const terminals = vscode.window.terminals;
+  let terminal;
+  if (terminals.length > 0) {
+    // Reuse the first terminal if one is available
+    terminal = terminals.find(
+      (terminal) => terminal.name && terminal.name.startsWith("Runst: ")
+    );
+  }
+
+  if (!terminal) {
+    // Create a new terminal if no terminals are available
+    terminal = vscode.window.createTerminal(title);
+  }
+
+  terminal.show();
+  terminal.sendText(command);
+}
+
+function getModulePath(filePath) {
+  const srcIndex = filePath.indexOf("/src/");
+  if (srcIndex === -1) {
+    return null;
+  }
+
+  let modulePath = filePath.substring(srcIndex + 5);
+  modulePath = modulePath.replace(/\//g, "::");
+  modulePath = modulePath.replace(".rs", "");
+
+  return modulePath;
+}
 
 // Helper function to get the range of the function surrounding the given position
 function getSurroundingFunctionRange(document, position) {
@@ -162,6 +197,20 @@ function getSurroundingFunctionRange(document, position) {
   const endChar = document.lineAt(endLine).range.end.character;
   const functionRange = new vscode.Range(startLine, 0, endLine, endChar);
   return functionRange;
+}
+
+function checkModTest(src, currentLine) {
+  let allLines = src.split("\n");
+  const lines = allLines
+    .slice(0, currentLine)
+    .filter((l) => l.trim().length > 0);
+  const modTestsLine = lines.findIndex((l) => l.includes("mod tests"));
+  if (modTestsLine < 0) {
+    return false;
+  }
+
+  const cfgTestLine = lines[modTestsLine - 1];
+  return cfgTestLine.includes("#[cfg(test)]");
 }
 
 module.exports = {
