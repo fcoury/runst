@@ -14,8 +14,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "runst.helloWorld",
+        "command": "runst.runCurrentTest",
         "title": "Runst: Execute current test"
+      },
+      {
+        "command": "runst.runLastTest",
+        "title": "Runst: Execute last test"
       }
     ]
   },

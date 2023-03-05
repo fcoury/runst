@@ -10,15 +10,10 @@ const path = require("path");
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "runst" is now active!');
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with  registerCommand
-  // The commandId parameter must match the command field in package.json
-  let disposable = vscode.commands.registerCommand(
-    "runst.helloWorld",
+  let runCurrentTestDisposable = vscode.commands.registerCommand(
+    "runst.runCurrentTest",
     function () {
       // Get the current editor and document
       const editor = vscode.window.activeTextEditor;
@@ -56,6 +51,7 @@ function activate(context) {
       const functionName = match[2];
       console.log("Found test function:", functionName);
 
+      context.workspaceState.update("lastTestInfo", { fileUnit, functionName });
       const terminal = vscode.window.createTerminal("Runst");
       terminal.show();
       terminal.sendText(
@@ -64,7 +60,23 @@ function activate(context) {
     }
   );
 
-  context.subscriptions.push(disposable);
+  let runLastTestDisposable = vscode.commands.registerCommand(
+    "runst.runLastTest",
+    function () {
+      const lastTestInfo = context.workspaceState.get("lastTestInfo");
+      console.log("lastTestInfo", lastTestInfo);
+      if (lastTestInfo) {
+        const { fileUnit, functionName } = lastTestInfo;
+        const terminal = vscode.window.createTerminal("My Terminal");
+        terminal.show();
+        terminal.sendText(
+          `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`
+        );
+      }
+    }
+  );
+
+  context.subscriptions.push(runCurrentTestDisposable);
 }
 
 // This method is called when your extension is deactivated
@@ -128,11 +140,12 @@ function getSurroundingFunctionRange(document, position) {
     // No test function found
     return null;
   } else {
-    currentLineNumber = functionQualifierLine;
+    currentLineNumber = functionQualifierLine + 1;
+    currentLineText = document.lineAt(currentLineNumber).text;
   }
 
   // Find the end of the function definition
-  const startLine = currentLineNumber;
+  const startLine = functionQualifierLine;
   let endLine = currentLineNumber + 1;
 
   while (endLine < document.lineCount && !currentLineText.includes("{")) {
