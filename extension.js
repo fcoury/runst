@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 const vscode = require("vscode");
+const path = require("path");
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -23,29 +24,43 @@ function activate(context) {
       const editor = vscode.window.activeTextEditor;
       const document = editor.document;
 
+      const fileName = document.fileName;
+      const filePath = fileName.substring(0, fileName.lastIndexOf("/"));
+      const fileUnit = path.parse(fileName).name;
+
+      if (!fileName.includes(".rs")) {
+        console.log("Not a rust file");
+        return;
+      }
+
       // Get the current cursor position
       const position = editor.selection.active;
 
       // Find the range of the function surrounding the cursor
       const functionRange = getSurroundingFunctionRange(document, position);
 
-      if (functionRange !== null) {
-        // Check if the function is a test function
-        const functionText = document.getText(functionRange);
-        const testRegex = /#\[(tokio::)?test\]\s*fn\s+(\w+)\s*\(/;
-        const match = testRegex.exec(functionText);
-
-        if (match !== null) {
-          const functionName = match[2];
-          console.log(functionName);
-          if (document.fileName.includes(".rs")) {
-            vscode.window.showInformationMessage(functionName);
-          }
-          return;
-        }
+      if (functionRange === null) {
+        return;
       }
 
-      console.log("No test function found");
+      // Check if the function is a test function
+      const functionText = document.getText(functionRange);
+      const testRegex = /#\[(tokio::)?test\]\s*fn\s+(\w+)\s*\(/;
+      const match = testRegex.exec(functionText);
+
+      if (match === null) {
+        console.log("Not a test function:", functionText);
+        return;
+      }
+
+      const functionName = match[2];
+      console.log("Found test function:", functionName);
+
+      const terminal = vscode.window.createTerminal("Runst");
+      terminal.show();
+      terminal.sendText(
+        `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`
+      );
     }
   );
 
