@@ -1,15 +1,11 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 const vscode = require("vscode");
 const path = require("path");
-
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+  // attempts to run the test under the cursor and saves it to the workspace state
   let runCurrentTestDisposable = vscode.commands.registerCommand(
     "runst.runCurrentTest",
     function () {
@@ -68,6 +64,7 @@ function activate(context) {
     }
   );
 
+  // re-runs the last test that was run
   let runLastTestDisposable = vscode.commands.registerCommand(
     "runst.runLastTest",
     function () {
@@ -81,9 +78,9 @@ function activate(context) {
   context.subscriptions.push(runCurrentTestDisposable);
 }
 
-// This method is called when your extension is deactivated
 function deactivate() {}
 
+// runs a given command on the terminal and gives it a title
 function runCommandInTerminal(data) {
   const { command, title } = data;
   const terminals = vscode.window.terminals;
@@ -95,7 +92,9 @@ function runCommandInTerminal(data) {
     );
   }
 
-  if (!terminal) {
+  if (terminal) {
+    terminal.title = title;
+  } else {
     // Create a new terminal if no terminals are available
     terminal = vscode.window.createTerminal(title);
   }
