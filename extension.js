@@ -111,7 +111,10 @@ function getModulePath(filePath) {
   }
 
   let modulePath = filePath.substring(srcIndex + 5);
-  modulePath = modulePath.replace(/\//g, "::");
+  const parts = modulePath
+    .split("/")
+    .filter((part) => part !== "mod" && part !== "mod.rs");
+  modulePath = parts.join("::");
   modulePath = modulePath.replace(".rs", "");
 
   return modulePath;
