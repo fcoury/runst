@@ -5,12 +5,47 @@ const { getModulePath } = require("./util");
 /**
  * @param {vscode.ExtensionContext} context
  */
-function activate(context) {
-  // attempts to run the test under the cursor and saves it to the workspace state
-  let runCurrentTestDisposable = vscode.commands.registerCommand(
+async function activate(context) {
+  function initStatusBarItem() {
+    const statusBarItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Left,
+      100
+    );
+    let currentTask = context.workspaceState.get("currentTask") || "Test";
+    statusBarItem.text = `Runst: ${currentTask}`;
+    statusBarItem.command = "runst.toggleTask";
+    statusBarItem.show();
+
+    return statusBarItem;
+  }
+
+  const statusBarItem = initStatusBarItem();
+
+  const toggleTaskDisposable = vscode.commands.registerCommand(
+    "runst.toggleTask",
+    function () {
+      const currentTask = context.workspaceState.get("currentTask") || "Test";
+      const newTask = currentTask === "Test" ? "Watch" : "Test";
+      context.workspaceState.update("currentTask", newTask);
+      statusBarItem.text = `Runst: ${newTask}`;
+    }
+  );
+
+  const runAllTestsDisposable = vscode.commands.registerCommand(
+    "runst.runAllTests",
+    function () {
+      const data = {
+        command: "",
+        title: "Runst: All Tests",
+      };
+      context.workspaceState.update("lastTestInfo", data);
+      runCommandInTerminal(data);
+    }
+  );
+
+  const runCurrentTestDisposable = vscode.commands.registerCommand(
     "runst.runCurrentTest",
     function () {
-      // Get the current editor and document
       const editor = vscode.window.activeTextEditor;
       const document = editor.document;
 
@@ -53,10 +88,10 @@ function activate(context) {
       const data = {};
       if (isModTest) {
         const qualifiedName = getModulePath(fileName);
-        data.command = `cargo test --lib -- ${qualifiedName}::${functionName} --exact --nocapture`;
+        data.command = `--lib -- ${qualifiedName}::${functionName} --exact --nocapture`;
         data.title = `Runst: ${functionName}`;
       } else {
-        data.command = `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`;
+        data.command = `--test ${fileUnit} -- ${functionName} --exact --nocapture`;
         data.title = `Runst: ${fileUnit}:${functionName}`;
       }
 
@@ -66,7 +101,7 @@ function activate(context) {
   );
 
   // re-runs the last test that was run
-  let runLastTestDisposable = vscode.commands.registerCommand(
+  const runLastTestDisposable = vscode.commands.registerCommand(
     "runst.runLastTest",
     function () {
       const data = context.workspaceState.get("lastTestInfo");
@@ -77,32 +112,45 @@ function activate(context) {
   );
 
   context.subscriptions.push(runCurrentTestDisposable);
+  context.subscriptions.push(runLastTestDisposable);
+  context.subscriptions.push(toggleTaskDisposable);
+  context.subscriptions.push(runAllTestsDisposable);
+
+  // runs a given command on the terminal and gives it a title
+  async function runCommandInTerminal(data) {
+    const { command, title } = data;
+    const terminals = vscode.window.terminals;
+    let terminal;
+    if (terminals.length > 0) {
+      // Reuse the first terminal if one is available
+      terminal = terminals.find(
+        (terminal) => terminal.name && terminal.name.startsWith("Runst: ")
+      );
+    }
+
+    if (terminal) {
+      terminal.dispose();
+    }
+
+    // Create a new terminal if no terminals are available
+    terminal = vscode.window.createTerminal({
+      name: title,
+      isTransient: true,
+    });
+
+    terminal.show(true);
+
+    const currentTask = context.workspaceState.get("currentTask") || "Test";
+    const cmd =
+      currentTask === "Test"
+        ? `cargo test ${command}`
+        : `cargo watch -x 'test ${command}'`;
+    terminal.sendText(cmd);
+    // doesn't keep the terminal focused
+  }
 }
 
 function deactivate() {}
-
-// runs a given command on the terminal and gives it a title
-function runCommandInTerminal(data) {
-  const { command, title } = data;
-  const terminals = vscode.window.terminals;
-  let terminal;
-  if (terminals.length > 0) {
-    // Reuse the first terminal if one is available
-    terminal = terminals.find(
-      (terminal) => terminal.name && terminal.name.startsWith("Runst: ")
-    );
-  }
-
-  if (terminal) {
-    terminal.title = title;
-  } else {
-    // Create a new terminal if no terminals are available
-    terminal = vscode.window.createTerminal(title);
-  }
-
-  terminal.show();
-  terminal.sendText(command);
-}
 
 // Helper function to get the range of the function surrounding the given position
 function getSurroundingFunctionRange(document, position) {

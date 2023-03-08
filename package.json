@@ -7,7 +7,14 @@
     "type": "git",
     "url": "https://github.com/fcoury/runst"
   },
-  "version": "0.0.3",
+  "keywords": [
+    "Test Runner",
+    "Rust Test",
+    "Rust",
+    "Tests"
+  ],
+  "icon": "images/logo.png",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.76.0"
   },
@@ -20,23 +27,45 @@
     "commands": [
       {
         "command": "runst.runCurrentTest",
-        "title": "Runst: Execute current test"
+        "title": "Runst: current test"
       },
       {
         "command": "runst.runLastTest",
-        "title": "Runst: Execute last test"
+        "title": "Runst: last test"
+      },
+      {
+        "command": "runst.toggleTask",
+        "title": "Runst: toggle between one-off and watching tests"
+      },
+      {
+        "command": "runst.runAllTests",
+        "title": "Runst: all tests"
       }
     ],
     "keybindings": [
       {
         "command": "runst.runCurrentTest",
         "key": "shift+win+a",
-        "mac": "shift+cmd+a"
+        "mac": "shift+cmd+a",
+        "when": "editorLangId == rust"
       },
       {
-        "command": "runst.runCurrentTest",
+        "command": "runst.runLastTest",
         "key": "ctrl+win+a",
-        "mac": "ctrl+cmd+a"
+        "mac": "ctrl+cmd+a",
+        "when": "editorLangId == rust"
+      },
+      {
+        "command": "runst.toggleTask",
+        "key": "win+t",
+        "mac": "alt+t",
+        "when": "editorLangId == rust"
+      },
+      {
+        "command": "runst.runAllTests",
+        "key": "ctrl+win+t",
+        "mac": "ctrl+cmd+t",
+        "when": "editorLangId == rust"
       }
     ]
   },
