@@ -1,5 +1,6 @@
 const vscode = require("vscode");
 const path = require("path");
+const { getModulePath } = require("./util");
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -52,7 +53,7 @@ function activate(context) {
       const data = {};
       if (isModTest) {
         const qualifiedName = getModulePath(fileName);
-        data.command = `cargo test --lib -- ${qualifiedName}::tests::${functionName} --exact --nocapture`;
+        data.command = `cargo test --lib -- ${qualifiedName}::${functionName} --exact --nocapture`;
         data.title = `Runst: ${functionName}`;
       } else {
         data.command = `cargo test --test ${fileUnit} -- ${functionName} --exact --nocapture`;
@@ -101,22 +102,6 @@ function runCommandInTerminal(data) {
 
   terminal.show();
   terminal.sendText(command);
-}
-
-function getModulePath(filePath) {
-  const srcIndex = filePath.indexOf("/src/");
-  if (srcIndex === -1) {
-    return null;
-  }
-
-  let modulePath = filePath.substring(srcIndex + 5);
-  const parts = modulePath
-    .split("/")
-    .filter((part) => part !== "mod" && part !== "mod.rs");
-  modulePath = parts.join("::");
-  modulePath = modulePath.replace(".rs", "");
-
-  return modulePath;
 }
 
 // Helper function to get the range of the function surrounding the given position
