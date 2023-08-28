@@ -1,5 +1,6 @@
 const vscode = require("vscode");
 const path = require("path");
+const fs = require("fs");
 const { getModulePath } = require("./util");
 
 /**
@@ -70,7 +71,8 @@ async function activate(context) {
 
       // Check if the function is a test function
       const functionText = document.getText(functionRange);
-      const testRegex = /#\[(tokio::)?test\]\s*fn\s+(\w+)\s*\(/;
+      const testRegex =
+        /#\[(tokio::)?test(\([^)]*\))?\]\s*(async\s)?fn\s+(\w+)\s*\(/;
       const match = testRegex.exec(functionText);
 
       if (match === null) {
@@ -78,7 +80,7 @@ async function activate(context) {
         return;
       }
 
-      const functionName = match[2];
+      const functionName = match[4];
       console.log("Found test function:", functionName);
 
       // check if the file is in a mod tests
@@ -86,15 +88,28 @@ async function activate(context) {
       const isModTest = checkModTest(src, position.line);
 
       const data = {};
+
+      const result = isInCargoWorkspace(filePath);
+      let pkg = "";
+      if (result.isInWorkspace) {
+        console.log(`Module name: ${result.moduleName}`);
+        pkg = `--package ${result.moduleName} `;
+      } else {
+        console.log("Not in cargo workspace");
+      }
+
+      // cargo test --package mflow --test postgres_entity -- entity_operations --exact --nocapture
+
       if (isModTest) {
         const qualifiedName = getModulePath(fileName);
-        data.command = `--lib -- ${qualifiedName}::${functionName} --exact --nocapture`;
+        data.command = `${pkg}--lib -- ${qualifiedName}::${functionName} --exact --nocapture`;
         data.title = `Runst: ${functionName}`;
       } else {
-        data.command = `--test ${fileUnit} -- ${functionName} --exact --nocapture`;
+        data.command = `${pkg}--test ${fileUnit} -- ${functionName} --exact --nocapture`;
         data.title = `Runst: ${fileUnit}:${functionName}`;
       }
 
+      console.log("Running command:", data.command);
       context.workspaceState.update("lastTestInfo", data);
       runCommandInTerminal(data);
     }
@@ -166,7 +181,7 @@ function getSurroundingFunctionRange(document, position) {
     const functionRange = new vscode.Range(startLine, 0, endLine, endChar);
     const functionText = document.getText(functionRange);
     const regex = new RegExp(
-      `(#\\[(tokio::)?test\\]\\s*fn\\s+${currentFunctionName}\\s*\\()|(fn\\s+${currentFunctionName}\\s*\\()`
+      `(#\\[(tokio::)?test(\\([^)]*\\))?\\]\\s*fn\\s+${currentFunctionName}\\s*\\()|(fn\\s+${currentFunctionName}\\s*\\()`
     );
     const match = regex.exec(functionText);
     if (match !== null) {
@@ -204,7 +219,7 @@ function getSurroundingFunctionRange(document, position) {
   }
 
   // Checks if the non-empty line is either #[test] or #[tokio::test]
-  const testRegex = /#\[(tokio::)?test\]/;
+  const testRegex = /#\[(tokio::)?test(\([^)]*\))?\]/;
   const match = testRegex.exec(currentLineText);
   if (match === null) {
     // No test function found
@@ -232,6 +247,65 @@ function getSurroundingFunctionRange(document, position) {
   const endChar = document.lineAt(endLine).range.end.character;
   const functionRange = new vscode.Range(startLine, 0, endLine, endChar);
   return functionRange;
+}
+
+function findWorkspaceCargoToml(directory) {
+  const cargoTomlPath = path.join(directory, "Cargo.toml");
+  if (fs.existsSync(cargoTomlPath)) {
+    const cargoTomlContents = fs.readFileSync(cargoTomlPath, "utf8");
+    if (cargoTomlContents.includes("[workspace]")) {
+      return cargoTomlPath;
+    }
+  }
+  const parentDirectory = path.dirname(directory);
+  if (parentDirectory === directory) {
+    return null;
+  }
+  return findWorkspaceCargoToml(parentDirectory);
+}
+
+function findModuleName(workspaceCargoTomlPath, filePath) {
+  const cargoTomlContents = fs.readFileSync(workspaceCargoTomlPath, "utf8");
+  const matches = cargoTomlContents.match(/members\s*=\s*\[([\s\S]*?)\]/);
+  if (matches && matches[1]) {
+    const membersList = matches[1];
+    const modules = membersList
+      .split(",")
+      .map((module) => module.trim().replace(/["']/g, ""));
+    let rootModulePath = null;
+
+    for (const module of modules) {
+      const modulePath = path.join(
+        path.dirname(workspaceCargoTomlPath),
+        module
+      );
+      if (module === ".") {
+        rootModulePath = modulePath;
+        continue; // Skip the root module for now.
+      }
+      if (filePath.startsWith(modulePath)) {
+        return module;
+      }
+    }
+
+    // If no module matched and the file is under the root module, return '.'.
+    if (rootModulePath && filePath.startsWith(rootModulePath)) {
+      return ".";
+    }
+  }
+  return null;
+}
+
+function isInCargoWorkspace(filePath) {
+  const directory = path.dirname(filePath);
+  const workspaceCargoTomlPath = findWorkspaceCargoToml(directory);
+  if (workspaceCargoTomlPath) {
+    const moduleName = findModuleName(workspaceCargoTomlPath, filePath);
+    if (moduleName) {
+      return { isInWorkspace: true, moduleName: moduleName };
+    }
+  }
+  return { isInWorkspace: false, moduleName: null };
 }
 
 function checkModTest(src, currentLine) {
